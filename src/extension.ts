@@ -38,15 +38,21 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
 			],
 		};
 
+		// Read file as binary and convert to base64 data URL
+		const fileData = await vscode.workspace.fs.readFile(document.uri);
+		const fileName = path.basename(document.uri.fsPath);
+		const mimeType = fileName.endsWith('.exr') ? 'image/x-exr' : 'image/vnd.radiance';
+		const base64Data = Buffer.from(fileData).toString('base64');
+		const dataUrl = `data:${mimeType};base64,${base64Data}`;
+
 		webviewPanel.webview.html = this.getWebviewContent(
 			webviewPanel.webview,
-			document.uri
+			dataUrl,
+			fileName
 		);
 	}
 
-	private getWebviewContent(webview: vscode.Webview, fileUri: vscode.Uri): string {
-		const fileName = path.basename(fileUri.fsPath);
-		const fileData = fileUri.with({ scheme: 'vscode-resource' }).toString();
+	private getWebviewContent(webview: vscode.Webview, dataUrl: string, fileName: string): string {
 
 		return `<!DOCTYPE html>
 <html lang="en">
@@ -147,16 +153,19 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
         Space: Toggle rotation | R: Reset view
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@r128/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@r128/examples/js/loaders/EXRLoader.js"></script>
-    <script>
-        let scene, camera, renderer, controls, mesh;
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+        import { RGBELoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/RGBELoader.js';
+        import { EXRLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/EXRLoader.js';
+        import { PMREMGenerator } from 'https://unpkg.com/three@0.160.0/examples/jsm/pmrem/PMREMGenerator.js';
+
+        let scene, camera, renderer, controls;
         let isRotating = false;
         let exposure = 0;
 
-        // Get file data
-        const fileUri = '${fileData}';
+        // Get file data (data URL) and filename
+        const fileUri = '${dataUrl}';
         const fileName = '${fileName}';
 
         function init() {
@@ -164,42 +173,31 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             const width = container.clientWidth;
             const height = container.clientHeight;
 
-            // Scene setup
             scene = new THREE.Scene();
 
-            // Camera
             camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-            camera.position.z = 0.1;
+            camera.position.set(0, 0, 0.1);
 
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(width, height);
             renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+            renderer.outputEncoding = THREE.sRGBEncoding;
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 1;
             container.appendChild(renderer.domElement);
 
-            // Controls
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
             controls.autoRotate = false;
             controls.autoRotateSpeed = 2;
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
 
-            // Lighting
-            const light = new THREE.DirectionalLight(0xffffff, 1);
-            light.position.set(0, 1, 0);
-            scene.add(light);
-
-            // Exposure control
             document.getElementById('exposure').addEventListener('change', (e) => {
                 exposure = parseFloat(e.target.value);
                 renderer.toneMappingExposure = Math.pow(2, exposure);
                 document.getElementById('exposureValue').textContent = exposure.toFixed(1);
             });
 
-            // Keyboard controls
             window.addEventListener('keydown', (e) => {
                 if (e.code === 'Space') {
                     isRotating = !isRotating;
@@ -213,53 +211,52 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
                 }
             });
 
-            // Load HDR/EXR file
             loadHdrExrFile();
 
-            // Handle window resize
             window.addEventListener('resize', onWindowResize);
-
-            // Animation loop
             animate();
         }
 
         function loadHdrExrFile() {
             const isEXR = fileName.toLowerCase().endsWith('.exr');
-            
+
+            const pmremGenerator = new PMREMGenerator(renderer);
+            pmremGenerator.compileEquirectangularShader();
+
             if (isEXR) {
-                // For EXR files, we'll use a simple texture load
-                const loader = new THREE.TextureLoader();
+                const loader = new EXRLoader();
                 loader.load(
                     fileUri,
                     (texture) => {
-                        texture.colorSpace = THREE.LinearSRGBColorSpace;
                         texture.mapping = THREE.EquirectangularReflectionMapping;
-                        
-                        scene.background = texture;
-                        scene.environment = texture;
+                        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+                        scene.background = envMap;
+                        scene.environment = envMap;
+                        texture.dispose();
+                        pmremGenerator.dispose();
                     },
                     undefined,
-                    (error) => {
-                        console.error('Failed to load EXR file:', error);
-                        showError('Failed to load EXR file: ' + error.message);
+                    (err) => {
+                        console.error('Failed to load EXR', err);
+                        showError('Failed to load EXR file');
                     }
                 );
             } else {
-                // For HDR files
-                const loader = new THREE.TextureLoader();
+                const loader = new RGBELoader();
+                loader.setDataType(THREE.UnsignedByteType);
                 loader.load(
                     fileUri,
                     (texture) => {
-                        texture.colorSpace = THREE.LinearSRGBColorSpace;
-                        texture.mapping = THREE.EquirectangularReflectionMapping;
-                        
-                        scene.background = texture;
-                        scene.environment = texture;
+                        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+                        scene.background = envMap;
+                        scene.environment = envMap;
+                        texture.dispose();
+                        pmremGenerator.dispose();
                     },
                     undefined,
-                    (error) => {
-                        console.error('Failed to load HDR file:', error);
-                        showError('Failed to load HDR file: ' + error.message);
+                    (err) => {
+                        console.error('Failed to load HDR', err);
+                        showError('Failed to load HDR file');
                     }
                 );
             }
@@ -275,7 +272,6 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             const container = document.getElementById('viewer');
             const width = container.clientWidth;
             const height = container.clientHeight;
-
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
             renderer.setSize(width, height);
@@ -286,7 +282,6 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             info.innerHTML = '<div style="color: #ff6b6b; font-weight: bold;">Error</div><div style="margin-top: 8px;">' + message + '</div>';
         }
 
-        // Initialize when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
