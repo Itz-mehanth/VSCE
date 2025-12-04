@@ -75,7 +75,7 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob: data:; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline'; connect-src https://unpkg.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob: data:; script-src 'unsafe-inline' ${webview.cspSource}; style-src 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>360 HDR/EXR Viewer - ${fileName}</title>
     <style>
