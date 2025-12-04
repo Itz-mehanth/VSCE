@@ -3,6 +3,7 @@
   "displayName": "HDR/EXR 360 Viewer",
   "description": "View HDR and EXR files in 360 view from the origin",
   "version": "0.0.1",
+  "publisher": "Mehanth",
   "repository": {
     "type": "git",
     "url": "https://github.com/Itz-mehanth/VSCE"
