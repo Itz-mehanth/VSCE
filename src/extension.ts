@@ -2,62 +2,80 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 
 class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
-	public static readonly viewType = 'hdrExr360Viewer.viewer';
+    public static readonly viewType = 'hdrExr360Viewer.viewer';
 
-	public static register(context: vscode.ExtensionContext): vscode.Disposable {
-		const provider = new HdrExrEditorProvider(context);
-		const providerRegistration = vscode.window.registerCustomEditorProvider(
-			HdrExrEditorProvider.viewType,
-			provider
-		);
-		return providerRegistration;
-	}
+    public static register(context: vscode.ExtensionContext): vscode.Disposable {
+        const provider = new HdrExrEditorProvider(context);
+        const providerRegistration = vscode.window.registerCustomEditorProvider(
+            HdrExrEditorProvider.viewType,
+            provider
+        );
+        return providerRegistration;
+    }
 
-	constructor(private readonly context: vscode.ExtensionContext) {}
+    constructor(private readonly context: vscode.ExtensionContext) { }
 
-	async openCustomDocument(
-		uri: vscode.Uri,
-		_openContext: vscode.CustomDocumentOpenContext,
-		_token: vscode.CancellationToken
-	): Promise<vscode.CustomDocument> {
-		return {
-			uri,
-			dispose: () => {},
-		};
-	}
+    async openCustomDocument(
+        uri: vscode.Uri,
+        _openContext: vscode.CustomDocumentOpenContext,
+        _token: vscode.CancellationToken
+    ): Promise<vscode.CustomDocument> {
+        return {
+            uri,
+            dispose: () => { },
+        };
+    }
 
-	async resolveCustomEditor(
-		document: vscode.CustomDocument,
-		webviewPanel: vscode.WebviewPanel,
-		_token: vscode.CancellationToken
-	): Promise<void> {
-		webviewPanel.webview.options = {
-			enableScripts: true,
-			localResourceRoots: [
-				vscode.Uri.file(path.join(this.context.extensionPath, 'media')),
-			],
-		};
+    async resolveCustomEditor(
+        document: vscode.CustomDocument,
+        webviewPanel: vscode.WebviewPanel,
+        _token: vscode.CancellationToken
+    ): Promise<void> {
+        webviewPanel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.file(path.join(this.context.extensionPath, 'media')),
+            ],
+        };
 
-		// Read file as binary and convert to base64 data URL
-		const fileData = await vscode.workspace.fs.readFile(document.uri);
-		const fileName = path.basename(document.uri.fsPath);
-		const mimeType = fileName.endsWith('.exr') ? 'image/x-exr' : 'image/vnd.radiance';
-		const base64Data = Buffer.from(fileData).toString('base64');
-		const dataUrl = `data:${mimeType};base64,${base64Data}`;
+        // Read file as binary and convert to base64 data URL
+        const fileData = await vscode.workspace.fs.readFile(document.uri);
+        const fileName = path.basename(document.uri.fsPath);
+        const mimeType = fileName.endsWith('.exr') ? 'image/x-exr' : 'image/vnd.radiance';
+        const base64Data = Buffer.from(fileData).toString('base64');
+        const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
-		webviewPanel.webview.html = this.getWebviewContent(
-			webviewPanel.webview,
-			dataUrl,
-			fileName
-		);
-	}
+        const threeUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'three.module.js'));
+        const orbitControlsUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'OrbitControls.js'));
+        const rgbeLoaderUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'RGBELoader.js'));
+        const exrLoaderUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'EXRLoader.js'));
 
-	private getWebviewContent(webview: vscode.Webview, dataUrl: string, fileName: string): string {
+        webviewPanel.webview.html = this.getWebviewContent(
+            webviewPanel.webview,
+            dataUrl,
+            fileName,
+            threeUri,
+            orbitControlsUri,
+            rgbeLoaderUri,
+            exrLoaderUri
+        );
+    }
 
-		return `<!DOCTYPE html>
+    private getWebviewContent(
+        webview: vscode.Webview,
+        dataUrl: string,
+        fileName: string,
+        threeUri: vscode.Uri,
+        orbitControlsUri: vscode.Uri,
+        rgbeLoaderUri: vscode.Uri,
+        exrLoaderUri: vscode.Uri
+    ): string {
+
+        return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob: data:; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline'; connect-src https://unpkg.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>360 HDR/EXR Viewer - ${fileName}</title>
     <style>
@@ -132,6 +150,14 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             letter-spacing: 0.5px;
         }
     </style>
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "${threeUri}"
+            }
+        }
+    </script>
 </head>
 <body>
     <div id="viewer"></div>
@@ -154,11 +180,12 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
     </div>
 
     <script type="module">
-        import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-        import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-        import { RGBELoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/RGBELoader.js';
-        import { EXRLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/EXRLoader.js';
-        import { PMREMGenerator } from 'https://unpkg.com/three@0.160.0/examples/jsm/pmrem/PMREMGenerator.js';
+        import * as THREE from 'three';
+        import { OrbitControls } from '${orbitControlsUri}';
+        import { RGBELoader } from '${rgbeLoaderUri}';
+        import { EXRLoader } from '${exrLoaderUri}';
+        
+        const PMREMGenerator = THREE.PMREMGenerator;
 
         let scene, camera, renderer, controls;
         let isRotating = false;
@@ -181,7 +208,7 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(width, height);
             renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 1;
             container.appendChild(renderer.domElement);
@@ -290,12 +317,12 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
     </script>
 </body>
 </html>`;
-	}
+    }
 }
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('HDR/EXR 360 Viewer extension activated!');
-	context.subscriptions.push(HdrExrEditorProvider.register(context));
+    console.log('HDR/EXR 360 Viewer extension activated!');
+    context.subscriptions.push(HdrExrEditorProvider.register(context));
 }
 
-export function deactivate() {}
+export function deactivate() { }
