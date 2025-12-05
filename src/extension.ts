@@ -47,21 +47,16 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
         const base64Data = Buffer.from(fileData).toString('base64');
         const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
-        const threeUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'three.module.js'));
-        const orbitControlsUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'OrbitControls.js'));
-        const rgbeLoaderUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'RGBELoader.js'));
-        const exrLoaderUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'EXRLoader.js'));
-        const fflateUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'fflate.module.js'));
+        // Generate webview URI for the bundled webview script
+        const webviewBundleUri = webviewPanel.webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'media', 'webview-bundle.js')
+        );
 
         webviewPanel.webview.html = this.getWebviewContent(
             webviewPanel.webview,
             dataUrl,
             fileName,
-            threeUri,
-            orbitControlsUri,
-            rgbeLoaderUri,
-            exrLoaderUri,
-            fflateUri
+            webviewBundleUri
         );
     }
 
@@ -69,18 +64,14 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
         webview: vscode.Webview,
         dataUrl: string,
         fileName: string,
-        threeUri: vscode.Uri,
-        orbitControlsUri: vscode.Uri,
-        rgbeLoaderUri: vscode.Uri,
-        exrLoaderUri: vscode.Uri,
-        fflateUri: vscode.Uri
+        webviewBundleUri: vscode.Uri
     ): string {
 
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob: data:; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob: data:; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline'; connect-src data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>360 HDR/EXR Viewer - ${fileName}</title>
     <style>
@@ -155,15 +146,6 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             letter-spacing: 0.5px;
         }
     </style>
-    </style>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "${threeUri}",
-                "three/examples/jsm/libs/fflate.module.js": "${fflateUri}"
-            }
-        }
-    </script>
 </head>
 <body>
     <div id="viewer"></div>
@@ -184,159 +166,28 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
     <div id="controls">
         Space: Toggle rotation | R: Reset view
     </div>
+
+    <script src="${webviewBundleUri}"></script>
     <script>
-        // Debug: surface the computed webview URIs and test fetching the fflate module
-        (function(){
+        (async () => {
             try {
-                console.log('DEBUG: threeUri ->', '${threeUri}');
-                console.log('DEBUG: orbitControlsUri ->', '${orbitControlsUri}');
-                console.log('DEBUG: rgbeLoaderUri ->', '${rgbeLoaderUri}');
-                console.log('DEBUG: exrLoaderUri ->', '${exrLoaderUri}');
-                console.log('DEBUG: fflateUri ->', '${fflateUri}');
-                // Try fetching the fflate module to reveal status and any 401/403 in DevTools network
-                fetch('${fflateUri}').then(r => {
-                    console.log('DEBUG: fetch fflate status', r.status, r.type, r.url);
-                    return r.text().then(t => console.log('DEBUG: fflate length', t.length));
-                }).catch(e => console.error('DEBUG: fetch fflate failed', e));
-            } catch (e) { console.error('DEBUG: uri debug failed', e); }
-        })();
-    </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from '${orbitControlsUri}';
-        import { RGBELoader } from '${rgbeLoaderUri}';
-        import { EXRLoader } from '${exrLoaderUri}';
-        
-        const PMREMGenerator = THREE.PMREMGenerator;
-
-        let scene, camera, renderer, controls;
-        let isRotating = false;
-        let exposure = 0;
-
-        // Get file data (data URL) and filename
-        const fileUri = '${dataUrl}';
-        const fileName = '${fileName}';
-
-        function init() {
-            const container = document.getElementById('viewer');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-
-            scene = new THREE.Scene();
-
-            camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
-            camera.position.set(0, 0, 0.1);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(width, height);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.outputColorSpace = THREE.SRGBColorSpace;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1;
-            container.appendChild(renderer.domElement);
-
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.autoRotate = false;
-            controls.autoRotateSpeed = 2;
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-
-            document.getElementById('exposure').addEventListener('change', (e) => {
-                exposure = parseFloat(e.target.value);
-                renderer.toneMappingExposure = Math.pow(2, exposure);
-                document.getElementById('exposureValue').textContent = exposure.toFixed(1);
-            });
-
-            window.addEventListener('keydown', (e) => {
-                if (e.code === 'Space') {
-                    isRotating = !isRotating;
-                    controls.autoRotate = isRotating;
-                    e.preventDefault();
+                console.log('Starting viewer initialization...');
+                // Wait a tick to ensure the bundle is fully loaded
+                await new Promise(resolve => setTimeout(resolve, 100));
+                if (typeof window.initViewer === 'function') {
+                    console.log('Calling window.initViewer...');
+                    window.initViewer('${dataUrl}', '${fileName}');
+                } else {
+                    throw new Error('window.initViewer is not a function');
                 }
-                if (e.code === 'KeyR') {
-                    camera.position.set(0, 0, 0.1);
-                    controls.target.set(0, 0, 0);
-                    controls.update();
+            } catch (err) {
+                console.error('Failed to initialize viewer:', err);
+                const info = document.getElementById('info');
+                if (info) {
+                    info.innerHTML = '<div style="color: #ff6b6b; font-weight: bold;">Error</div><div style="margin-top: 8px;">Failed to initialize viewer: ' + err + '</div>';
                 }
-            });
-
-            loadHdrExrFile();
-
-            window.addEventListener('resize', onWindowResize);
-            animate();
-        }
-
-        function loadHdrExrFile() {
-            const isEXR = fileName.toLowerCase().endsWith('.exr');
-
-            const pmremGenerator = new PMREMGenerator(renderer);
-            pmremGenerator.compileEquirectangularShader();
-
-            if (isEXR) {
-                const loader = new EXRLoader();
-                loader.load(
-                    fileUri,
-                    (texture) => {
-                        texture.mapping = THREE.EquirectangularReflectionMapping;
-                        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-                        scene.background = envMap;
-                        scene.environment = envMap;
-                        texture.dispose();
-                        pmremGenerator.dispose();
-                    },
-                    undefined,
-                    (err) => {
-                        console.error('Failed to load EXR', err);
-                        showError('Failed to load EXR file');
-                    }
-                );
-            } else {
-                const loader = new RGBELoader();
-                loader.setDataType(THREE.UnsignedByteType);
-                loader.load(
-                    fileUri,
-                    (texture) => {
-                        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-                        scene.background = envMap;
-                        scene.environment = envMap;
-                        texture.dispose();
-                        pmremGenerator.dispose();
-                    },
-                    undefined,
-                    (err) => {
-                        console.error('Failed to load HDR', err);
-                        showError('Failed to load HDR file');
-                    }
-                );
             }
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        function onWindowResize() {
-            const container = document.getElementById('viewer');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
-            renderer.setSize(width, height);
-        }
-
-        function showError(message) {
-            const info = document.getElementById('info');
-            info.innerHTML = '<div style="color: #ff6b6b; font-weight: bold;">Error</div><div style="margin-top: 8px;">' + message + '</div>';
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
+        })();
     </script>
 </body>
 </html>`;
