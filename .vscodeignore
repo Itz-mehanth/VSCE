@@ -16,4 +16,4 @@ vsc-extension-quickstart.md
 # Ignore large HDR/EXR assets and media folders
 *.hdr
 *.exr
-media/**
+

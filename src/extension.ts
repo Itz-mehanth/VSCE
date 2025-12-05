@@ -34,7 +34,9 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
         webviewPanel.webview.options = {
             enableScripts: true,
             localResourceRoots: [
-                vscode.Uri.file(path.join(this.context.extensionPath, 'media')),
+                // Allow loading local extension resources from the packaged extension.
+                vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+                this.context.extensionUri
             ],
         };
 
@@ -49,6 +51,7 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
         const orbitControlsUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'OrbitControls.js'));
         const rgbeLoaderUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'RGBELoader.js'));
         const exrLoaderUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'EXRLoader.js'));
+        const fflateUri = webviewPanel.webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'fflate.module.js'));
 
         webviewPanel.webview.html = this.getWebviewContent(
             webviewPanel.webview,
@@ -57,7 +60,8 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
             threeUri,
             orbitControlsUri,
             rgbeLoaderUri,
-            exrLoaderUri
+            exrLoaderUri,
+            fflateUri
         );
     }
 
@@ -68,7 +72,8 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
         threeUri: vscode.Uri,
         orbitControlsUri: vscode.Uri,
         rgbeLoaderUri: vscode.Uri,
-        exrLoaderUri: vscode.Uri
+        exrLoaderUri: vscode.Uri,
+        fflateUri: vscode.Uri
     ): string {
 
         return `<!DOCTYPE html>
@@ -154,7 +159,8 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
     <script type="importmap">
         {
             "imports": {
-                "three": "${threeUri}"
+                "three": "${threeUri}",
+                "three/examples/jsm/libs/fflate.module.js": "${fflateUri}"
             }
         }
     </script>
@@ -178,6 +184,23 @@ class HdrExrEditorProvider implements vscode.CustomReadonlyEditorProvider {
     <div id="controls">
         Space: Toggle rotation | R: Reset view
     </div>
+    <script>
+        // Debug: surface the computed webview URIs and test fetching the fflate module
+        (function(){
+            try {
+                console.log('DEBUG: threeUri ->', '${threeUri}');
+                console.log('DEBUG: orbitControlsUri ->', '${orbitControlsUri}');
+                console.log('DEBUG: rgbeLoaderUri ->', '${rgbeLoaderUri}');
+                console.log('DEBUG: exrLoaderUri ->', '${exrLoaderUri}');
+                console.log('DEBUG: fflateUri ->', '${fflateUri}');
+                // Try fetching the fflate module to reveal status and any 401/403 in DevTools network
+                fetch('${fflateUri}').then(r => {
+                    console.log('DEBUG: fetch fflate status', r.status, r.type, r.url);
+                    return r.text().then(t => console.log('DEBUG: fflate length', t.length));
+                }).catch(e => console.error('DEBUG: fetch fflate failed', e));
+            } catch (e) { console.error('DEBUG: uri debug failed', e); }
+        })();
+    </script>
 
     <script type="module">
         import * as THREE from 'three';
