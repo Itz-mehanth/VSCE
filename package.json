@@ -2,7 +2,7 @@
   "name": "hdr-exr-360-viewer",
   "displayName": "HDR/EXR 360 Viewer",
   "description": "Professional 360-degree viewer for HDR and EXR files with real-time exposure control and WebGL acceleration",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "publisher": "Mehanth",
   "license": "MIT",
   "author": {
@@ -19,7 +19,7 @@
   },
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.99.3"
   },
   "categories": [
     "Visualization",
@@ -75,7 +75,7 @@
     "three": "^0.160.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.100.0",
+    "@types/vscode": "^1.99.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "typescript-eslint": "^8.46.3",
