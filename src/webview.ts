@@ -110,11 +110,12 @@ console.log('Webview bundle loaded, THREE available:', typeof THREE !== 'undefin
         } else {
             const loader = new RGBELoader();
             console.log('RGBELoader created, attempting to load...');
-            loader.setDataType(THREE.UnsignedByteType);
+            loader.type = THREE.FloatType;
             loader.load(
                 fileUri,
                 (texture: THREE.DataTexture) => {
                     console.log('HDR texture loaded successfully:', texture);
+                    texture.mapping = THREE.EquirectangularReflectionMapping;
                     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
                     scene.background = envMap;
                     scene.environment = envMap;

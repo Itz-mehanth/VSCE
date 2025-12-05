@@ -33408,11 +33408,12 @@
       } else {
         const loader = new RGBELoader();
         console.log("RGBELoader created, attempting to load...");
-        loader.setDataType(UnsignedByteType);
+        loader.type = FloatType;
         loader.load(
           fileUri,
           (texture) => {
             console.log("HDR texture loaded successfully:", texture);
+            texture.mapping = EquirectangularReflectionMapping;
             const envMap = pmremGenerator.fromEquirectangular(texture).texture;
             scene.background = envMap;
             scene.environment = envMap;

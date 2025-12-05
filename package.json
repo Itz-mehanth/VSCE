@@ -2,7 +2,7 @@
   "name": "hdr-exr-360-viewer",
   "displayName": "HDR/EXR 360 Viewer",
   "description": "Professional 360-degree viewer for HDR and EXR files with real-time exposure control and WebGL acceleration",
-  "version": "0.0.20",
+  "version": "0.0.24",
   "publisher": "Mehanth",
   "license": "MIT",
   "author": {
@@ -17,8 +17,9 @@
   "bugs": {
     "url": "https://github.com/Itz-mehanth/VSCE/issues"
   },
+  "icon": "icon.png",
   "engines": {
-    "vscode": "^1.106.1"
+    "vscode": "^1.100.0"
   },
   "categories": [
     "Visualization",
@@ -74,7 +75,7 @@
     "three": "^0.160.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.106.1",
+    "@types/vscode": "^1.100.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "typescript-eslint": "^8.46.3",
