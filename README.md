@@ -14,6 +14,10 @@ A professional VS Code extension for interactive 360-degree visualization of HDR
 
 ---
 
+<img width="1919" height="974" alt="Screenshot 2025-12-08 191429" src="https://github.com/user-attachments/assets/60944da9-63f7-459d-9285-8e83ca246ba1" />
+
+---
+
 ## Features
 
 ✨ **Core Capabilities**
